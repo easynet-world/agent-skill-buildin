@@ -7,6 +7,8 @@ DIST_DIR="$ROOT_DIR/dist"
 ARTIFACT_NAME="skills.tgz"
 ARTIFACT_PATH="$DIST_DIR/$ARTIFACT_NAME"
 CHECKSUM_PATH="$DIST_DIR/$ARTIFACT_NAME.sha256"
+SIGNATURE_PATH="$DIST_DIR/$ARTIFACT_NAME.sig"
+SIGNING_KEY_PATH="${SIGNING_KEY_PATH:-}"
 
 if [ ! -d "$SKILLS_DIR" ]; then
   echo "skills directory not found: $SKILLS_DIR" >&2
@@ -14,7 +16,7 @@ if [ ! -d "$SKILLS_DIR" ]; then
 fi
 
 mkdir -p "$DIST_DIR"
-rm -f "$ARTIFACT_PATH" "$CHECKSUM_PATH"
+rm -f "$ARTIFACT_PATH" "$CHECKSUM_PATH" "$SIGNATURE_PATH"
 
 # Package only the skills directory to keep artifact layout stable.
 tar -czf "$ARTIFACT_PATH" -C "$ROOT_DIR" skills
@@ -28,5 +30,19 @@ else
   exit 1
 fi
 
+if [ -z "$SIGNING_KEY_PATH" ]; then
+  echo "SIGNING_KEY_PATH is required for signing." >&2
+  echo "Example: SIGNING_KEY_PATH=/path/to/private.pem npm run build" >&2
+  exit 1
+fi
+
+if [ ! -f "$SIGNING_KEY_PATH" ]; then
+  echo "Signing key not found: $SIGNING_KEY_PATH" >&2
+  exit 1
+fi
+
+openssl dgst -sha256 -sign "$SIGNING_KEY_PATH" -out "$SIGNATURE_PATH" "$ARTIFACT_PATH"
+
 echo "Built artifact: $ARTIFACT_PATH"
 echo "Checksum: $(cat "$CHECKSUM_PATH")"
+echo "Signature: $SIGNATURE_PATH"

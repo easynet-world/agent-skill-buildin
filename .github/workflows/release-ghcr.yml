@@ -45,7 +45,22 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "image=ghcr.io/${{ github.repository_owner }}/agent-skill-buildin" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare signing key
+        shell: bash
+        env:
+          SKILL_SIGNING_PRIVATE_KEY_B64: ${{ secrets.SKILL_SIGNING_PRIVATE_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SKILL_SIGNING_PRIVATE_KEY_B64:-}" ]; then
+            echo "Missing required secret: SKILL_SIGNING_PRIVATE_KEY_B64" >&2
+            exit 1
+          fi
+          echo "$SKILL_SIGNING_PRIVATE_KEY_B64" | base64 -d > "$RUNNER_TEMP/skill-signing-private.pem"
+          chmod 600 "$RUNNER_TEMP/skill-signing-private.pem"
+
       - name: Build artifact
+        env:
+          SIGNING_KEY_PATH: ${{ runner.temp }}/skill-signing-private.pem
         run: npm run build
 
       - name: Install ORAS
@@ -65,6 +80,7 @@ jobs:
           oras push "$IMAGE:$VERSION" \
             --artifact-type application/vnd.easynet.agent-skills.bundle.v1 \
             dist/skills.tgz:application/vnd.easynet.agent-skills.layer.v1.tar+gzip \
+            dist/skills.tgz.sig:application/vnd.easynet.agent-skills.signature.v1+binary \
             dist/skills.tgz.sha256:text/plain
 
           oras tag "$IMAGE:$VERSION" "$SHA_TAG"
