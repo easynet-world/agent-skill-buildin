@@ -1,0 +1,11 @@
+{
+  "name": "@easynet/agent-skill-buildin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Built-in skill artifacts for Easynet agents",
+  "license": "MIT",
+  "scripts": {
+    "build": "bash scripts/package-skills.sh",
+    "clean": "rm -rf dist"
+  }
+}

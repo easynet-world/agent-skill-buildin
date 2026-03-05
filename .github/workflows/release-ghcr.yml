@@ -1,0 +1,75 @@
+name: Release GHCR
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to publish (example: v0.1.0)'
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Publish Skill Artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.].*)?$ ]]; then
+            echo "Invalid version: $VERSION" >&2
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${{ github.repository_owner }}/agent-skill-buildin" >> "$GITHUB_OUTPUT"
+
+      - name: Build artifact
+        run: npm run build
+
+      - name: Install ORAS
+        uses: oras-project/setup-oras@v1
+
+      - name: Login GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Publish OCI artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="${{ steps.version.outputs.image }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          SHA_TAG="sha-${GITHUB_SHA::12}"
+
+          oras push "$IMAGE:$VERSION" \
+            --artifact-type application/vnd.easynet.agent-skills.bundle.v1 \
+            dist/skills.tgz:application/vnd.easynet.agent-skills.layer.v1.tar+gzip \
+            dist/skills.tgz.sha256:text/plain
+
+          oras tag "$IMAGE:$VERSION" "$SHA_TAG"
+
+      - name: Summary
+        run: |
+          echo "Published: ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}"
+          echo "Published: ${{ steps.version.outputs.image }}:sha-${GITHUB_SHA::12}"
