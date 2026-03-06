@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SKILLS_DIR="$ROOT_DIR/skills"
 DIST_DIR="$ROOT_DIR/dist"
-ARTIFACT_NAME="skills.tgz"
+ARTIFACT_NAME="skills.zip"
 ARTIFACT_PATH="$DIST_DIR/$ARTIFACT_NAME"
 CHECKSUM_PATH="$DIST_DIR/$ARTIFACT_NAME.sha256"
 SIGNATURE_PATH="$DIST_DIR/$ARTIFACT_NAME.sig"
@@ -16,10 +16,10 @@ if [ ! -d "$SKILLS_DIR" ]; then
 fi
 
 mkdir -p "$DIST_DIR"
-rm -f "$ARTIFACT_PATH" "$CHECKSUM_PATH" "$SIGNATURE_PATH"
+rm -f "$ARTIFACT_PATH" "$CHECKSUM_PATH" "$SIGNATURE_PATH" "$DIST_DIR/skills.tgz" "$DIST_DIR/skills.tgz.sha256" "$DIST_DIR/skills.tgz.sig"
 
 # Package only the skills directory to keep artifact layout stable.
-tar -czf "$ARTIFACT_PATH" -C "$ROOT_DIR" skills
+(cd "$ROOT_DIR" && zip -rq "$ARTIFACT_PATH" skills)
 
 if command -v shasum >/dev/null 2>&1; then
   shasum -a 256 "$ARTIFACT_PATH" | awk '{print $1}' > "$CHECKSUM_PATH"

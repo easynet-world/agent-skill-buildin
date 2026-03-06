@@ -1,4 +1,4 @@
-name: Release GHCR
+name: Release Skills
 
 on:
   push:
@@ -11,8 +11,7 @@ on:
         required: false
 
 permissions:
-  contents: read
-  packages: write
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,37 +19,43 @@ concurrency:
 
 jobs:
   release:
-    name: Publish Skill Artifact
+    name: Publish Skill Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve tags
-        id: tags
+      - name: Resolve release metadata
+        id: release
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            INPUT_VERSION="${{ github.event.inputs.version }}"
-            if [ -n "$INPUT_VERSION" ]; then
-              VERSION_TAG="$INPUT_VERSION"
-            else
-              VERSION_TAG="v$(node -p "require('./package.json').version")"
-            fi
-          else
-            VERSION_TAG="v$(node -p "require('./package.json').version")"
-          fi
+          PACKAGE_VERSION="v$(node -p "require('./package.json').version")"
 
-          if [[ ! "$VERSION_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.].*)?$ ]]; then
-            echo "Invalid version: $VERSION_TAG" >&2
+          if [[ ! "$PACKAGE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.].*)?$ ]]; then
+            echo "Invalid package version: $PACKAGE_VERSION" >&2
             exit 1
           fi
 
-          echo "version_tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
-          echo "latest_tag=latest" >> "$GITHUB_OUTPUT"
-          echo "sha_tag=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
-          echo "image=ghcr.io/${{ github.repository_owner }}/agent-skill-buildin" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            INPUT_VERSION="${{ github.event.inputs.version }}"
+            if [ -n "$INPUT_VERSION" ]; then
+              RELEASE_TAG="$INPUT_VERSION"
+            else
+              RELEASE_TAG="$PACKAGE_VERSION"
+            fi
+          else
+            RELEASE_TAG="sha-${GITHUB_SHA::12}"
+          fi
+
+          if [[ ! "$RELEASE_TAG" =~ ^(v[0-9]+\.[0-9]+\.[0-9]+([-.].*)?|sha-[0-9a-f]{12})$ ]]; then
+            echo "Invalid release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "release_title=agent-skill-buildin $PACKAGE_VERSION ($RELEASE_TAG)" >> "$GITHUB_OUTPUT"
 
       - name: Prepare signing key
         shell: bash
@@ -70,32 +75,46 @@ jobs:
           SIGNING_KEY_PATH: ${{ runner.temp }}/skill-signing-private.pem
         run: npm run build
 
-      - name: Install ORAS
-        uses: oras-project/setup-oras@v1
-
-      - name: Login GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Publish OCI artifact
+      - name: Create or update GitHub Release
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          IMAGE="${{ steps.tags.outputs.image }}"
-          VERSION_TAG="${{ steps.tags.outputs.version_tag }}"
-          LATEST_TAG="${{ steps.tags.outputs.latest_tag }}"
-          SHA_TAG="${{ steps.tags.outputs.sha_tag }}"
+          RELEASE_TAG="${{ steps.release.outputs.release_tag }}"
+          RELEASE_TITLE="${{ steps.release.outputs.release_title }}"
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
 
-          oras push "$IMAGE:$SHA_TAG" \
-            --artifact-type application/vnd.easynet.agent-skills.bundle.v1 \
-            dist/skills.tgz:application/vnd.easynet.agent-skills.layer.v1.tar+gzip \
-            dist/skills.tgz.sig:application/vnd.easynet.agent-skills.signature.v1+binary \
-            dist/skills.tgz.sha256:text/plain
+          cat > "$NOTES_FILE" <<EOF
+          Package version: ${{ steps.release.outputs.package_version }}
+          Commit: ${{ github.sha }}
 
-          oras tag "$IMAGE:$SHA_TAG" "$LATEST_TAG"
-          oras tag "$IMAGE:$SHA_TAG" "$VERSION_TAG"
+          Assets:
+          - skills.zip
+          - skills.zip.sig
+          - skills.zip.sha256
+          EOF
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE"
+          else
+            gh release create "$RELEASE_TAG" --target "${{ github.sha }}" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE"
+          fi
+
+      - name: Upload release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload "${{ steps.release.outputs.release_tag }}" \
+            dist/skills.zip \
+            dist/skills.zip.sig \
+            dist/skills.zip.sha256 \
+            --clobber
 
       - name: Summary
         run: |
-          echo "Published: ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}"
-          echo "Published: ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.latest_tag }}"
-          echo "Published: ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.version_tag }}"
+          echo "Published release: ${{ steps.release.outputs.release_tag }}"
+          echo "Package version: ${{ steps.release.outputs.package_version }}"
+          echo "Assets: skills.zip, skills.zip.sig, skills.zip.sha256"
