@@ -2,13 +2,13 @@ name: Release GHCR
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag to publish (example: v0.1.0)'
-        required: true
+        description: 'Optional version tag to publish (example: v0.1.0)'
+        required: false
 
 permissions:
   contents: read
@@ -26,23 +26,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve version
-        id: version
+      - name: Resolve tags
+        id: tags
         shell: bash
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
+            INPUT_VERSION="${{ github.event.inputs.version }}"
+            if [ -n "$INPUT_VERSION" ]; then
+              VERSION_TAG="$INPUT_VERSION"
+            else
+              VERSION_TAG="v$(node -p "require('./package.json').version")"
+            fi
           else
-            VERSION="${GITHUB_REF_NAME}"
+            VERSION_TAG="v$(node -p "require('./package.json').version")"
           fi
 
-          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.].*)?$ ]]; then
-            echo "Invalid version: $VERSION" >&2
+          if [[ ! "$VERSION_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.].*)?$ ]]; then
+            echo "Invalid version: $VERSION_TAG" >&2
             exit 1
           fi
 
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=latest" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
           echo "image=ghcr.io/${{ github.repository_owner }}/agent-skill-buildin" >> "$GITHUB_OUTPUT"
 
       - name: Prepare signing key
@@ -73,19 +80,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          IMAGE="${{ steps.version.outputs.image }}"
-          VERSION="${{ steps.version.outputs.version }}"
-          SHA_TAG="sha-${GITHUB_SHA::12}"
+          IMAGE="${{ steps.tags.outputs.image }}"
+          VERSION_TAG="${{ steps.tags.outputs.version_tag }}"
+          LATEST_TAG="${{ steps.tags.outputs.latest_tag }}"
+          SHA_TAG="${{ steps.tags.outputs.sha_tag }}"
 
-          oras push "$IMAGE:$VERSION" \
+          oras push "$IMAGE:$SHA_TAG" \
             --artifact-type application/vnd.easynet.agent-skills.bundle.v1 \
             dist/skills.tgz:application/vnd.easynet.agent-skills.layer.v1.tar+gzip \
             dist/skills.tgz.sig:application/vnd.easynet.agent-skills.signature.v1+binary \
             dist/skills.tgz.sha256:text/plain
 
-          oras tag "$IMAGE:$VERSION" "$SHA_TAG"
+          oras tag "$IMAGE:$SHA_TAG" "$LATEST_TAG"
+          oras tag "$IMAGE:$SHA_TAG" "$VERSION_TAG"
 
       - name: Summary
         run: |
-          echo "Published: ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}"
-          echo "Published: ${{ steps.version.outputs.image }}:sha-${GITHUB_SHA::12}"
+          echo "Published: ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}"
+          echo "Published: ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.latest_tag }}"
+          echo "Published: ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.version_tag }}"

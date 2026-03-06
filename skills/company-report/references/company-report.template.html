@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Company Report Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --ink: #13253a;
+      --muted: #5f738c;
+      --brand: #0f4c81;
+      --brand-soft: #e6eef7;
+      --card-border: #d7e2ef;
+    }
+    body { font-family: "Manrope", "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
+    .report-wrap { max-width: 1080px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+    .hero { background: linear-gradient(135deg, #0f4c81 0%, #1a6aa8 100%); color: #fff; border-radius: 1rem; padding: 1.25rem; margin-bottom: 1.25rem; }
+    .section-card { background: #fff; border: 1px solid var(--card-border); border-radius: .9rem; margin-bottom: 1rem; overflow: hidden; }
+    .section-head { background: var(--brand-soft); color: var(--brand); font-weight: 800; text-transform: uppercase; letter-spacing: .04em; font-size: .78rem; padding: .7rem 1rem; }
+    .section-body { padding: 1rem; }
+    .news-item + .news-item { margin-top: .75rem; }
+    .news-link { font-weight: 700; color: #15395f; text-decoration: none; }
+    .news-link:hover { text-decoration: underline; }
+    .news-meta { color: var(--muted); font-size: .85rem; }
+    .error-box { border: 1px solid #f0b4b4; background: #fff2f2; color: #862b2b; border-radius: .75rem; padding: .75rem 1rem; }
+  </style>
+</head>
+<body>
+  <main class="report-wrap">
+    <header class="hero">
+      <h1 id="hero-title" class="h2 m-0">Company Report</h1>
+      <p id="hero-date" class="m-0" style="opacity:.9;">Generated: -</p>
+    </header>
+
+    <section id="company-overview" class="section-card">
+      <div class="section-head">1. Company Overview</div>
+      <div id="overview-body" class="section-body"></div>
+    </section>
+
+    <section id="stock-data" class="section-card">
+      <div class="section-head">2. Stock Data</div>
+      <div class="section-body">
+        <p id="stock-summary" class="news-meta"></p>
+        <div class="table-responsive">
+          <table class="table table-striped table-hover align-middle mb-0">
+            <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+            <tbody id="stock-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="news" class="section-card">
+      <div class="section-head">3. Recent News</div>
+      <div id="news-body" class="section-body"></div>
+    </section>
+
+    <section id="sources" class="section-card">
+      <div class="section-head">4. Sources</div>
+      <div class="section-body"><ul id="sources-list" class="list-unstyled mb-0"></ul></div>
+    </section>
+
+    <div id="error" class="error-box d-none"></div>
+  </main>
+
+  <script>
+    const REPORT_DATA = __REPORT_JSON__;
+
+    function esc(v) {
+      return String(v ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function num(v, digits = 2) {
+      return typeof v === "number" && Number.isFinite(v)
+        ? v.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })
+        : "Not available";
+    }
+
+    function int(v) {
+      return typeof v === "number" && Number.isFinite(v)
+        ? v.toLocaleString("en-US")
+        : "Not available";
+    }
+
+    function renderReport(data) {
+      const errorEl = document.getElementById("error");
+      try {
+        const company = data.company ?? {};
+        const stock = data.stock ?? {};
+        const metrics = stock.metrics ?? {};
+
+        document.getElementById("hero-title").textContent = `Company Report: ${company.name ?? "Unknown"}`;
+        document.getElementById("hero-date").textContent = `Generated: ${company.generatedAt ?? "-"}`;
+
+        const overview = Array.isArray(data.overview) ? data.overview : [];
+        const overviewBody = document.getElementById("overview-body");
+        overviewBody.innerHTML = overview.length
+          ? overview.map((p) => `<p>${esc(p)}</p>`).join("")
+          : `<p class="news-meta">Overview not available.</p>`;
+
+        document.getElementById("stock-summary").textContent = stock.summary ?? "Stock summary not available.";
+        const stockRows = [
+          ["Symbol", metrics.symbol ?? company.symbol ?? "N/A"],
+          ["Price", num(metrics.price)],
+          ["Change", (typeof metrics.change === "number" && typeof metrics.changePercent === "number")
+            ? `${metrics.change >= 0 ? "+" : ""}${num(metrics.change)} (${metrics.changePercent >= 0 ? "+" : ""}${num(metrics.changePercent)}%)`
+            : "Not available"],
+          ["Day Range", `${num(metrics.dayLow)} - ${num(metrics.dayHigh)}`],
+          ["Volume", int(metrics.volume)],
+        ];
+        document.getElementById("stock-table-body").innerHTML = stockRows
+          .map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`)
+          .join("");
+
+        const news = Array.isArray(data.news) ? data.news : [];
+        const newsBody = document.getElementById("news-body");
+        newsBody.innerHTML = news.length
+          ? news.map((n) => `
+            <div class="news-item">
+              <a class="news-link" href="${esc(n.url ?? "#")}">${esc(n.headline ?? "Untitled")}</a>
+              <div class="news-meta">${esc(n.source ?? "Unknown")}${n.date ? ` • ${esc(n.date)}` : ""}</div>
+              ${n.summary ? `<div class="news-meta mt-1">${esc(n.summary)}</div>` : ""}
+            </div>
+          `).join("")
+          : `<div class="news-meta">No recent news found.</div>`;
+
+        const sources = Array.isArray(data.sources) ? data.sources : [];
+        document.getElementById("sources-list").innerHTML = sources.length
+          ? sources.map((s) => `<li><a href="${esc(s.url ?? "#")}">${esc(s.name ?? "Source")}</a></li>`).join("")
+          : `<li>No sources available.</li>`;
+      } catch (err) {
+        errorEl.classList.remove("d-none");
+        errorEl.textContent = err instanceof Error ? err.message : String(err);
+      }
+    }
+
+    renderReport(REPORT_DATA);
+  </script>
+</body>
+</html>

@@ -1,10 +1,11 @@
 # agent-skill-buildin
 
-Built-in skill bundle for Easynet agents. This project packages `skills/` into a versioned OCI artifact and publishes it to GitHub Container Registry (GHCR).
+Built-in skill bundle for Easynet agents. This project packages `skills/` into a signed, versioned artifact and publishes it to GitHub Container Registry (GHCR).
 
 ## Structure
 
 - `skills/`: source skill directories (`SKILL.md`, `scripts/`, `references/`, assets)
+  - `skills/company-report/`: bundled from the `agent-runtime2/example` company-report workflow
 - `scripts/package-skills.sh`: packages and signs `skills/` into `dist/skills.tgz`
 - `.github/workflows/release-ghcr.yml`: publishes OCI artifact to GHCR
 
@@ -63,6 +64,7 @@ OCI media type:
 
 ```bash
 oras pull ghcr.io/<owner>/agent-skill-buildin:v0.1.0
+tar -xzf skills.tgz
 ```
 
-This downloads `skills.tgz`; unpack to a runtime skill directory.
+This downloads a signed skill bundle; unpacked content is the runtime `skills/` directory.
