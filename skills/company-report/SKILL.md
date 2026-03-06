@@ -27,7 +27,7 @@ If `COMPANY` is missing, ask one clarifying question.
 4. If news is empty/failed, retry `yahooFinanceNews` once with `query=COMPANY`.
 5. Write `output/company-report.json` after quote+news steps have been attempted.
 6. Call execute tool to run:
-   `node skills/company-report/scripts/merge-report.mjs output/company-report.json output/company-report.html skills/company-report/references/company-report.template.html`
+   `node scripts/merge-report.mjs output/company-report.json output/company-report.html references/company-report.template.html`
 
 Notes:
 

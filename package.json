@@ -1,6 +1,6 @@
 {
   "name": "@easynet/agent-skill-buildin",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Built-in skill artifacts for Easynet agents",
   "license": "MIT",
