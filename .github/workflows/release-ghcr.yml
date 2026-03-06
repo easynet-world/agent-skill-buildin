@@ -76,6 +76,19 @@ jobs:
           SIGNING_KEY_PATH: ${{ runner.temp }}/skill-signing-private.pem
         run: npm run build
 
+      - name: Enforce new version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="${{ steps.release.outputs.release_tag }}"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists." >&2
+            echo "Update package.json version before publishing a new skill bundle." >&2
+            exit 1
+          fi
+
       - name: Create or update GitHub Release
         shell: bash
         env:
@@ -97,11 +110,7 @@ jobs:
           - public.pem
           EOF
 
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE"
-          else
-            gh release create "$RELEASE_TAG" --target "${{ github.sha }}" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE"
-          fi
+          gh release create "$RELEASE_TAG" --target "${{ github.sha }}" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE"
 
       - name: Upload release assets
         shell: bash
