@@ -94,8 +94,21 @@ jobs:
           oras tag "$IMAGE:$SHA_TAG" "$LATEST_TAG"
           oras tag "$IMAGE:$SHA_TAG" "$VERSION_TAG"
 
+      - name: Set package visibility to public
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            "/orgs/${{ github.repository_owner }}/packages/container/agent-skill-buildin/visibility" \
+            -f visibility=public
+
       - name: Summary
         run: |
           echo "Published: ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}"
           echo "Published: ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.latest_tag }}"
           echo "Published: ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.version_tag }}"
+          echo "Visibility: public"
