@@ -45,17 +45,17 @@ jobs:
               RELEASE_TAG="$PACKAGE_VERSION"
             fi
           else
-            RELEASE_TAG="sha-${GITHUB_SHA::12}"
+            RELEASE_TAG="$PACKAGE_VERSION"
           fi
 
-          if [[ ! "$RELEASE_TAG" =~ ^(v[0-9]+\.[0-9]+\.[0-9]+([-.].*)?|sha-[0-9a-f]{12})$ ]]; then
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.].*)?$ ]]; then
             echo "Invalid release tag: $RELEASE_TAG" >&2
             exit 1
           fi
 
           echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          echo "release_title=agent-skill-buildin $PACKAGE_VERSION ($RELEASE_TAG)" >> "$GITHUB_OUTPUT"
+          echo "release_title=agent-skill-buildin $PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Prepare signing key
         shell: bash
@@ -69,6 +69,7 @@ jobs:
           fi
           echo "$SKILL_SIGNING_PRIVATE_KEY_B64" | base64 -d > "$RUNNER_TEMP/skill-signing-private.pem"
           chmod 600 "$RUNNER_TEMP/skill-signing-private.pem"
+          openssl rsa -in "$RUNNER_TEMP/skill-signing-private.pem" -pubout -out "$RUNNER_TEMP/public.pem"
 
       - name: Build artifact
         env:
@@ -93,6 +94,7 @@ jobs:
           - skills.zip
           - skills.zip.sig
           - skills.zip.sha256
+          - public.pem
           EOF
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
@@ -111,10 +113,11 @@ jobs:
             dist/skills.zip \
             dist/skills.zip.sig \
             dist/skills.zip.sha256 \
+            "$RUNNER_TEMP/public.pem#public.pem" \
             --clobber
 
       - name: Summary
         run: |
           echo "Published release: ${{ steps.release.outputs.release_tag }}"
           echo "Package version: ${{ steps.release.outputs.package_version }}"
-          echo "Assets: skills.zip, skills.zip.sig, skills.zip.sha256"
+          echo "Assets: skills.zip, skills.zip.sig, skills.zip.sha256, public.pem"
